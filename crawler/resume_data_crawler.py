@@ -4,7 +4,7 @@ import pandas as pd
 from sqlalchemy import create_engine, exc
 
 # Define Variables
-API_ENDPOINT = "https://data.coa.gov.tw/Service/OpenData/Resume/ResumeData_Plus.aspx"
+RESUME_DATA_API_ENDPOINT = "https://data.coa.gov.tw/Service/OpenData/Resume/ResumeData_Plus.aspx"
 RESUME_DATA_REQ_MAXIMUM = 20000
 
 DB_US = "datayoo"
@@ -14,13 +14,7 @@ DB_PORT = "3306"
 DB_NAME = "taft"
 DB_CONN_STR = f"mysql+pymysql://{DB_US}:{DB_PW}@{DB_HT}:{DB_PORT}/{DB_NAME}"
 
-##### resume data retrieve
-### request exterior api
-# Define the parameters
-params = {"$top": 10000, "$skip": 0}
-
-# Define the function to download and save resume data
-def get_resume_data(skip: int) -> pd.DataFrame:
+def fetch_resume_data(skip: int) -> pd.DataFrame:
     """
     Download and save resume data.
 
@@ -31,13 +25,13 @@ def get_resume_data(skip: int) -> pd.DataFrame:
         pandas.DataFrame: The resume data as a DataFrame.
     """
     print("collecting taft resume data with params skip = " + str(skip))
-    params["$skip"] = skip
-    response = requests.get(API_ENDPOINT, params=params)
-    data = response.json()
-    df = pd.json_normalize(data)
-    print("Data is retrieved successfully! There are " + str(df.shape[0]) + " row(s) returned in total.")
-    df.rename(columns={"Tracecode": "TraceCode"}, inplace=True)
-    return df
+    params = {"$top": 10000, "$skip": skip}
+    response = requests.get(RESUME_DATA_API_ENDPOINT, params=params)
+    response_content = response.json()
+    response_df = pd.json_normalize(response_content)
+    print("Data is retrieved successfully! There are " + str(response_df.shape[0]) + " row(s) returned in total.")
+    response_df.rename(columns={"Tracecode": "TraceCode"}, inplace=True)
+    return response_df
 
 def fetch_and_process_resume_data() -> pd.DataFrame:
     """
@@ -55,7 +49,7 @@ def fetch_and_process_resume_data() -> pd.DataFrame:
             - sub_product_name
             - LandSecNO
     """
-    resume_data_list = [get_resume_data(skip_i) for skip_i in range(0, RESUME_DATA_REQ_MAXIMUM, 10000)]
+    resume_data_list = [fetch_resume_data(skip_i) for skip_i in range(0, RESUME_DATA_REQ_MAXIMUM, 10000)]
 
     ### Concatenate all resume data
     resume_data_df = pd.concat(resume_data_list)
@@ -70,7 +64,7 @@ def fetch_and_process_resume_data() -> pd.DataFrame:
 
     resume_data_tbw = resume_data_df.copy()
     resume_data_tbw["sub_product_name"] = resume_data_tbw["ProductName"].str.split("-").str[0]
-    resume_data_processed_full = resume_data_tbw.rename(columns={
+    resume_data_tbw.rename(columns={
         "TraceCode": "trace_code",
         "ProductName": "product_name",
         "OrgID": "org_id",
@@ -80,7 +74,7 @@ def fetch_and_process_resume_data() -> pd.DataFrame:
         "StoreInfo": "store_info"
     }, inplace=False)
 
-    resume_data_tbw = resume_data_processed_full[[
+    resume_data_tbw = resume_data_tbw[[
         "trace_code",
         "product_name",
         "org_id",
