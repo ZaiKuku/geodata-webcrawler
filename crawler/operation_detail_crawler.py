@@ -4,7 +4,9 @@ import pandas as pd
 from sqlalchemy import create_engine, exc
 
 # Define Variables
-RESUME_DATA_API_ENDPOINT = "https://data.coa.gov.tw/Service/OpenData/Resume/ResumeData_Plus.aspx"
+OPERATION_DETAIL_API_ENDPOINT = (
+    "https://data.coa.gov.tw/Service/OpenData/Resume/OperationDetail_Plus.aspx?"
+)
 
 DB_US = "datayoo"
 DB_PW = urllib.parse.quote_plus("*@(!)@&#")
@@ -12,10 +14,6 @@ DB_HT = "192.168.1.103"
 DB_PORT = "3306"
 DB_NAME = "taft"
 DB_CONN_STR = f"mysql+pymysql://{DB_US}:{DB_PW}@{DB_HT}:{DB_PORT}/{DB_NAME}"
-
-OPERATION_DETAIL_API_ENDPOINT = (
-    "https://data.coa.gov.tw/Service/OpenData/Resume/OperationDetail_Plus.aspx?"
-)
 
 def fetch_operation_detail(trace_code: str) -> pd.DataFrame:
     """
