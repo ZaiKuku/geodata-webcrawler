@@ -45,18 +45,25 @@ def process_and_insert_operation_detail(fetched_operation_detail_df: pd.DataFram
     Process and insert operation detail data into the database.
 
     Args:
-        fetched_operation_detail_df (pd.DataFrame): DataFrame containing operation detail data to be processed and inserted.
+        fetched_operation_detail_df (pd.DataFrame): The resume data DataFrame containing the following columns:
+            - OperationDate
+            - OperationType
+            - Operation
+            - OperationMemo
+            - trace_code
     """
     fetched_operation_detail_df.rename(columns={
         "OperationDate": "operation_date",
         "OperationType": "operation_type",
-        "Operation": "operation_content",
+        "Operation": "operation_conetent",
         "OperationMemo": "operation_memo"
     }, inplace=True)
 
     with create_engine(DB_CONN_STR).connect() as conn_taft:
         try:
+            print(f"Updating {fetched_operation_detail_df.shape[0]} operation detail info records of trace code: {fetched_operation_detail_df['trace_code'].iloc[0]}")
             fetched_operation_detail_df.to_sql("resume_operation_detail_info", conn_taft, if_exists="append", index=False)
+            print("Updating operation is done.")
             conn_taft.commit()
         except exc.SQLAlchemyError as update_err_msg:
             print(f"An error occurred while writing data into DB: {update_err_msg}")
@@ -84,16 +91,20 @@ def main() -> None:
                 ''',
                 conn_taft
             )
+            print(f"There are {trace_codes_missing_oper_detail.shape[0]} trace code records is missing operation detail info ...")
 
         except exc.SQLAlchemyError as req_err_msg:
             print(f"An error occurred while writing data into DB: {req_err_msg}")
             conn_taft.rollback()
-
+    
+    total_update_records = 0
     for trace_code_i in trace_codes_missing_oper_detail['trace_code']:
         operation_detail_df = fetch_operation_detail(trace_code_i)
         if operation_detail_df.shape[0] == 0:
             continue
         process_and_insert_operation_detail(operation_detail_df)
+        total_update_records += operation_detail_df.shape[0]
+    print(f"All update is done! There are {total_update_records} record(s) inserted in total.")
 
 if __name__ == '__main__':
     try:

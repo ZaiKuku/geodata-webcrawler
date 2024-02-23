@@ -5,7 +5,7 @@ from sqlalchemy import create_engine, exc
 
 # Define Variables
 RESUME_DATA_API_ENDPOINT = "https://data.coa.gov.tw/Service/OpenData/Resume/ResumeData_Plus.aspx"
-RESUME_DATA_REQ_MAXIMUM = 20000
+RESUME_DATA_REQ_MAXIMUM = 1000000
 
 DB_US = "datayoo"
 DB_PW = urllib.parse.quote_plus("*@(!)@&#")
@@ -51,10 +51,9 @@ def fetch_and_process_resume_data() -> pd.DataFrame:
     """
     resume_data_list = [fetch_resume_data(skip_i) for skip_i in range(0, RESUME_DATA_REQ_MAXIMUM, 10000)]
 
-    ### Concatenate all resume data
     resume_data_df = pd.concat(resume_data_list)
+    resume_data_df.drop_duplicates(inplace=True)
 
-    ### Prepare resume data
     # Exclude trace codes for non-agricultural products (aquatic products/livestock products/processed agricultural products).
     resume_data_df = resume_data_df[
         (resume_data_df["TraceCode"].str[:1].astype(int) <= 1)
@@ -72,7 +71,7 @@ def fetch_and_process_resume_data() -> pd.DataFrame:
         "FarmerName": "farmer_name",
         "PackDate": "pkg_date",
         "StoreInfo": "store_info"
-    }, inplace=False)
+    }, inplace=True)
 
     resume_data_tbw = resume_data_tbw[[
         "trace_code",
