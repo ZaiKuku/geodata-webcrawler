@@ -3,20 +3,21 @@ import requests
 import pandas as pd
 from sqlalchemy import create_engine, exc
 from sqlalchemy.orm import Session
+from config import load_config
+
+# 加载配置并存储在变量中``
+config = load_config()
 
 # Define Variables
-RESUME_DATA_API_ENDPOINT = "https://data.moa.gov.tw/Service/OpenData/Resume/ResumeData_Plus.aspx"
-
-DB_US = "farmi-space-user"
-DB_PW = urllib.parse.quote_plus("fs82910273")
-DB_HT = "192.168.1.104"
-DB_PORT = "6607"
-DB_NAME = "taft"
-DB_CONN_STR = f"mysql+pymysql://{DB_US}:{DB_PW}@{DB_HT}:{DB_PORT}/{DB_NAME}"
-
-OPERATION_DETAIL_API_ENDPOINT = (
-    "https://data.moa.gov.tw/Service/OpenData/Resume/OperationDetail_Plus.aspx?"
-)
+RESUME_DATA_API_ENDPOINT = config['resume_data_api_endpoint']
+RESUME_DATA_REQ_MAXIMUM = int(config['resume_data_req_maximum'])
+DB_US = config['db_us']
+DB_PW = config['db_pw']
+DB_HT = config['db_ht']
+DB_PORT = config['db_port']
+DB_NAME = config['db_name']
+DB_CONN_STR = config['db_conn_str']
+OPERATION_DETAIL_API_ENDPOINT = config['operation_detail_api_endpoint']
 
 def fetch_operation_detail(trace_code: str) -> pd.DataFrame:
     """

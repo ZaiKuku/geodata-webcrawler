@@ -3,17 +3,20 @@ import requests
 import pandas as pd
 from sqlalchemy import create_engine, exc
 from sqlalchemy.orm import Session
+from config import load_config
+
+# 加载配置并存储在变量中
+config = load_config()
 
 # Define Variables
-RESUME_DATA_API_ENDPOINT = "https://data.moa.gov.tw/Service/OpenData/Resume/ResumeData_Plus.aspx"
-RESUME_DATA_REQ_MAXIMUM = 1000000
-
-DB_US = "farmi-space-user"
-DB_PW = urllib.parse.quote_plus("fs82910273")
-DB_HT = "192.168.1.104"
-DB_PORT = "6607"
-DB_NAME = "taft"
-DB_CONN_STR = f"mysql+pymysql://{DB_US}:{DB_PW}@{DB_HT}:{DB_PORT}/{DB_NAME}"
+RESUME_DATA_API_ENDPOINT = config['resume_data_api_endpoint']
+RESUME_DATA_REQ_MAXIMUM = int(config['resume_data_req_maximum'])
+DB_US = config['db_us']
+DB_PW = config['db_pw']
+DB_HT = config['db_ht']
+DB_PORT = config['db_port']
+DB_NAME = config['db_name']
+DB_CONN_STR = config['db_conn_str']
 
 def fetch_resume_data(skip: int) -> pd.DataFrame:
     """
@@ -166,7 +169,7 @@ def main():
 
     """
     last_time_update = fetch_last_time_update("resume_data")
-    resume_data_tbw = fetch_and_process_resume_data('2024/06/26')
+    resume_data_tbw = fetch_and_process_resume_data(last_time_update)
     resume_land_info_tbw = process_operation_detail_data(resume_data_tbw)
     resume_data_tbw.drop(['LandSecNO'], inplace=True, axis=1)
     print(f'There are {resume_data_tbw.shape[0]} resume data records and {resume_land_info_tbw.shape[0]} resume land info records collected in total.')
