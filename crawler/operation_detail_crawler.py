@@ -34,6 +34,7 @@ def fetch_operation_detail(trace_code: str) -> pd.DataFrame:
             - trace_code
     """
     params = {"Tracecode": trace_code}
+    print(f"Now is going to get operation detail info records of trace code: {trace_code}")
     response = requests.get(OPERATION_DETAIL_API_ENDPOINT, params=params)
     response_content = response.json()
     response_df = pd.json_normalize(response_content)
@@ -83,6 +84,7 @@ def main() -> None:
     """
     with create_engine(DB_CONN_STR).connect() as conn_taft:
         try:
+            print('Now is going to get the trace code list lack of operation detail info from DB ...')
             trace_codes_missing_oper_detail = pd.read_sql(
                 '''
                 SELECT DISTINCT resume_data.trace_code 

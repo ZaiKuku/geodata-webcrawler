@@ -194,7 +194,6 @@ def main():
             session.commit()
             print('DB tables update is done!')
         except exc.SQLAlchemyError as err_msg:
-            # Handle the exception
             print(f"An error occurred while writing data into DB: {err_msg}")
             # Perform rollback
             session.rollback()
