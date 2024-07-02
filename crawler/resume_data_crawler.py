@@ -2,15 +2,16 @@ import urllib.parse
 import requests
 import pandas as pd
 from sqlalchemy import create_engine, exc
+from sqlalchemy.orm import Session
 
 # Define Variables
-RESUME_DATA_API_ENDPOINT = "https://data.coa.gov.tw/Service/OpenData/Resume/ResumeData_Plus.aspx"
+RESUME_DATA_API_ENDPOINT = "https://data.moa.gov.tw/Service/OpenData/Resume/ResumeData_Plus.aspx"
 RESUME_DATA_REQ_MAXIMUM = 1000000
 
-DB_US = "datayoo"
-DB_PW = urllib.parse.quote_plus("*@(!)@&#")
-DB_HT = "192.168.1.103"
-DB_PORT = "3306"
+DB_US = "farmi-space-user"
+DB_PW = urllib.parse.quote_plus("fs82910273")
+DB_HT = "192.168.1.104"
+DB_PORT = "6607"
 DB_NAME = "taft"
 DB_CONN_STR = f"mysql+pymysql://{DB_US}:{DB_PW}@{DB_HT}:{DB_PORT}/{DB_NAME}"
 
@@ -30,10 +31,11 @@ def fetch_resume_data(skip: int) -> pd.DataFrame:
     response_content = response.json()
     response_df = pd.json_normalize(response_content)
     print("Data is retrieved successfully! There are " + str(response_df.shape[0]) + " row(s) returned in total.")
+    print("UpdateTime: " + response_df["Log_UpdateTime"].iloc[0])
     response_df.rename(columns={"Tracecode": "TraceCode"}, inplace=True)
     return response_df
 
-def fetch_and_process_resume_data() -> pd.DataFrame:
+def fetch_and_process_resume_data(last_time_update: str) -> pd.DataFrame:
     """
     Fetches resume data from an external API, processes it, and returns a DataFrame.
 
@@ -49,7 +51,22 @@ def fetch_and_process_resume_data() -> pd.DataFrame:
             - sub_product_name
             - LandSecNO
     """
-    resume_data_list = [fetch_resume_data(skip_i) for skip_i in range(0, RESUME_DATA_REQ_MAXIMUM, 10000)]
+
+    print(f"Last time update in database: {last_time_update}")
+    
+    resume_data_list = []
+    for skip_i in range(0, RESUME_DATA_REQ_MAXIMUM, 10000):
+        new_fetched_resume_data = fetch_resume_data(skip_i)
+        if last_time_update is not None:
+            new_fetched_resume_data = new_fetched_resume_data[new_fetched_resume_data["Log_UpdateTime"] > last_time_update]
+            
+        print(f"New fetched resume data shape: {new_fetched_resume_data.shape[0]}")
+        if new_fetched_resume_data.shape[0] != 10000:
+            break
+        resume_data_list.append(new_fetched_resume_data)
+        
+    
+    # resume_data_list = [fetch_resume_data(skip_i) for skip_i in range(0, RESUME_DATA_REQ_MAXIMUM, 10000)]
 
     resume_data_df = pd.concat(resume_data_list)
     resume_data_df.drop_duplicates(inplace=True)
@@ -113,6 +130,30 @@ def process_operation_detail_data(resume_data_df: pd.DataFrame) -> pd.DataFrame:
     resume_land_info_tbw.drop(columns=["LandSecNO"], inplace=True)
 
     return resume_land_info_tbw
+    
+def fetch_last_time_update(table_name: str) -> str:
+    """
+    Fetches the last time the table was updated.
+    
+    Args:
+        db_conn_str (str): The database connection string.
+        table_name (str): The table name from which the trace codes need to be fetched.
+        
+    Returns:
+        str: The last time the table was updated.
+    """
+    
+    with create_engine(DB_CONN_STR).connect() as conn_taft:
+        try:
+            last_time_update_sql = f"SELECT MAX(updated_at) FROM {table_name}"
+            last_time_update_df = pd.read_sql(last_time_update_sql, conn_taft)
+            last_time_update = last_time_update_df.iloc[0, 0]
+            return str(last_time_update)[:10].replace("-", "/")
+        except exc.SQLAlchemyError as err_msg:
+            print(f"An error occurred while fetching the last time the table was updated: {err_msg}")
+            return None
+            
+    
 
 def main():
     """
@@ -124,12 +165,14 @@ def main():
     3. Finds records that trace codes not in DB yet and writes the processed resume data and operation detail data into the database tables 'resume_data' and 'resume_land_info'.
 
     """
-    resume_data_tbw = fetch_and_process_resume_data()
+    last_time_update = fetch_last_time_update("resume_data")
+    resume_data_tbw = fetch_and_process_resume_data('2024/06/26')
     resume_land_info_tbw = process_operation_detail_data(resume_data_tbw)
     resume_data_tbw.drop(['LandSecNO'], inplace=True, axis=1)
     print(f'There are {resume_data_tbw.shape[0]} resume data records and {resume_land_info_tbw.shape[0]} resume land info records collected in total.')
 
-    with create_engine(DB_CONN_STR).connect() as conn_taft:
+    conn_taft = create_engine(DB_CONN_STR)
+    with Session(conn_taft) as session:
         try:
             # Get existing trace codes from database
             print('Data fetching and post-processing is done! Now is going to retrieve existed trace code in DB ...')
@@ -148,14 +191,13 @@ def main():
             resume_land_info_tbw_filtered = resume_land_info_tbw[~resume_land_info_tbw['trace_code'].isin(resume_land_info_existed_tc['trace_code'])]
             print(f'There are {resume_land_info_tbw_filtered.shape[0]} new trace code records is ready to write into table resume_land_info.')
             resume_land_info_tbw_filtered.to_sql("resume_land_info", conn_taft, if_exists="append", index=False)
-            conn_taft.commit()
+            session.commit()
             print('DB tables update is done!')
-
         except exc.SQLAlchemyError as err_msg:
             # Handle the exception
             print(f"An error occurred while writing data into DB: {err_msg}")
             # Perform rollback
-            conn_taft.rollback()
+            session.rollback()
 
 if __name__ == '__main__':
     try:

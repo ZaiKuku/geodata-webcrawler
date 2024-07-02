@@ -2,19 +2,20 @@ import urllib.parse
 import requests
 import pandas as pd
 from sqlalchemy import create_engine, exc
+from sqlalchemy.orm import Session
 
 # Define Variables
-RESUME_DATA_API_ENDPOINT = "https://data.coa.gov.tw/Service/OpenData/Resume/ResumeData_Plus.aspx"
+RESUME_DATA_API_ENDPOINT = "https://data.moa.gov.tw/Service/OpenData/Resume/ResumeData_Plus.aspx"
 
-DB_US = "datayoo"
-DB_PW = urllib.parse.quote_plus("*@(!)@&#")
-DB_HT = "192.168.1.103"
-DB_PORT = "3306"
+DB_US = "farmi-space-user"
+DB_PW = urllib.parse.quote_plus("fs82910273")
+DB_HT = "192.168.1.104"
+DB_PORT = "6607"
 DB_NAME = "taft"
 DB_CONN_STR = f"mysql+pymysql://{DB_US}:{DB_PW}@{DB_HT}:{DB_PORT}/{DB_NAME}"
 
 OPERATION_DETAIL_API_ENDPOINT = (
-    "https://data.coa.gov.tw/Service/OpenData/Resume/OperationDetail_Plus.aspx?"
+    "https://data.moa.gov.tw/Service/OpenData/Resume/OperationDetail_Plus.aspx?"
 )
 
 def fetch_operation_detail(trace_code: str) -> pd.DataFrame:
@@ -59,15 +60,16 @@ def process_and_insert_operation_detail(fetched_operation_detail_df: pd.DataFram
         "OperationMemo": "operation_memo"
     }, inplace=True)
 
-    with create_engine(DB_CONN_STR).connect() as conn_taft:
+    conn_taft = create_engine(DB_CONN_STR)
+    with Session(conn_taft) as session_taft:
         try:
             print(f"Updating {fetched_operation_detail_df.shape[0]} operation detail info records of trace code: {fetched_operation_detail_df['trace_code'].iloc[0]}")
             fetched_operation_detail_df.to_sql("resume_operation_detail_info", conn_taft, if_exists="append", index=False)
             print("Updating operation is done.")
-            conn_taft.commit()
+            session_taft.commit()
         except exc.SQLAlchemyError as update_err_msg:
             print(f"An error occurred while writing data into DB: {update_err_msg}")
-            conn_taft.rollback()
+            session_taft.rollback()
 
 def main() -> None:
     """
