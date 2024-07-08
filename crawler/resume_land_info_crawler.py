@@ -8,6 +8,7 @@ from config import load_config
 import time
 import json
 
+
 # 加载配置并存储在变量中``
 config = load_config()
 
@@ -221,6 +222,7 @@ def main() -> None:
     total_update_records = 0
     
     unknown_lands["coordinates"] = None
+    unknown_lands["geometry_type"] = "MultiPolygon"
     
     for index, row in unknown_lands.iterrows():
         time.sleep(1)
@@ -237,7 +239,7 @@ def main() -> None:
         if new_land_no["RETURNROWS"] != 0:
             land_info = get_s_n_id_geometry(new_land_no["RESPONSE"][0]["UNIT"], new_land_no["RESPONSE"][0]["SEC"], new_land_no["RESPONSE"][0]["NO"])
             if land_info is not None:
-                row["coordinates"] = land_info
+                row["coordinates"] = [land_info]
                 continue
         
         # fetch land info by land_serial_no
