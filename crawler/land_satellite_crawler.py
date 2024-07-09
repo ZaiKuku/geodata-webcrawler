@@ -1,30 +1,18 @@
+import io
+import json
+from datetime import timedelta
 from urllib.parse import quote
-import urllib.parse
-import requests
 import pandas as pd
+import requests
+from config import API_SATELLITE_ENDPOINT, DB_CONN_STR
 from sqlalchemy import create_engine, exc
 from sqlalchemy.orm import Session
-from config import load_config
-import time
-import json
-import io
-from datetime import datetime, timedelta
 
-# 加载配置并存储在变量中``
-config = load_config()
-
-# Define Variables
-DB_US = config['db_us']
-DB_PW = config['db_pw']
-DB_HT = config['db_ht']
-DB_PORT = config['db_port']
-DB_NAME = config['db_name']
-DB_CONN_STR = config['db_conn_str']
 
 def get_polygons_from_land_info():
     '''
     Read polygons from land_info table in the database.
-    
+
     Returns:
         DataFrame: The polygons read from the land_info table.
     '''
@@ -44,17 +32,19 @@ def get_polygons_from_land_info():
             print(f"There are {land_info.shape[0]} land info records fetched.")
             return land_info
         except exc.SQLAlchemyError as req_err_msg:
-            print(f"An error occurred while writing data into DB: {req_err_msg}")
+            print(f"An error occurred while writing data into DB:\
+                  {req_err_msg}")
             conn_taft.rollback()
             return None
+
 
 def generate_geojson_for_request_body(land_info):
     '''
     Generate GeoJSON for the request body of the API.
-    
+
     Args:
         land_info (DataFrame): The land information data.
-        
+
     Returns:
         dict: The GeoJSON for the request body of the API.
     '''
@@ -62,6 +52,7 @@ def generate_geojson_for_request_body(land_info):
 
     total = 0
     geojsons = {}
+    # To-do: use existed function to transfer the pandas to geopandas and then to GeoJSON
     for index, row in land_info.iterrows():
         for index_i in ["NDRE", "NDVI", "NDWI", "NDWI2"]:
             if row['coordinates'] == None:
@@ -79,6 +70,7 @@ def generate_geojson_for_request_body(land_info):
                     "type": "Feature",
                     "properties": {"field_id": row['land_id']},
                     "geometry": {
+                        # To-do: check if the coordinates are correct
                         "type": "MultiPolygon",
                         "coordinates": eval(row['coordinates'])
                     }
@@ -87,29 +79,32 @@ def generate_geojson_for_request_body(land_info):
             total += 1
             geojsons[(row['land_id'], index_i)] = geojson
 
-    print(f"Total {total} GeoJSONs are generated.")  # should be 4 * land_info_for_iter.shape[0]
+    # should be 4 * land_info_for_iter.shape[0]
+    print(f"Total {total} GeoJSONs are generated.")
     return geojsons
+
 
 def date_add_one_day(date):
     '''
     Add one day to the date string.
-    
+
     Args:
         date_str (str): The date string.
-        
+
     Returns:
         str: The date string after adding one day.
     '''
     date += timedelta(days=1)
     return date.strftime("%Y-%m-%d")
 
+
 def get_satellite_data_from_api(geojson, index_name, last_time_update):
     '''
     Get satellite data from the API.
-    
+
     Args:
         geojson (dict): The GeoJSON for the request body of the API.
-        
+
     Returns:
         dict: The satellite data from the API.
     '''
@@ -120,29 +115,35 @@ def get_satellite_data_from_api(geojson, index_name, last_time_update):
         "start_time": last_time_update,
         "data_source": "sen2",
     }
-    
-    url = 'http://192.168.1.104:8886/33FieldAvgCropIndex?'
-    
-    
+
+    url = f'{API_SATELLITE_ENDPOINT}/33FieldAvgCropIndex?'
+    print(f"url: {url}")
+
     try:
-        print(f'Getting the satellite data from API ...{index_name} {last_time_update}')
+        print('Getting the satellite data from API ...' +
+              f'{index_name} {last_time_update}')
         with io.BytesIO(json.dumps(geojson).encode('utf-8')) as json_bytes:
-            files = {"field_info": ('', json_bytes, 'application/octet-stream')}
+            files = {"field_info": (
+                '', json_bytes, 'application/octet-stream')}
             response = requests.post(url=url, files=files, params=params)
-        
+
         if response.status_code == 200:
             print(f'{index_name} {last_time_update} data is fetched successfully.')
             if response.json()["result"] == []:
                 return pd.DataFrame()
-            response_df = pd.DataFrame(response.json()["result"]).rename(columns={'index': 'index_value', 'time': 'index_date'})
+            response_df = pd.DataFrame(response.json()["result"]).rename(
+                columns={'index': 'index_value', 'time': 'index_date'})
             response_df.drop(['field_id', 'cloud'], axis=1, inplace=True)
             return response_df
         else:
-            print(f"An error occurred while fetching data from the API: {response.text}")
+            print(f"An error occurred while fetching data from the API: \
+                {response.text}")
             return None
     except requests.exceptions.RequestException as req_err_msg:
-        print(f"An error occurred while fetching data from the API: {req_err_msg}")
+        print(f"An error occurred while fetching data from the API: \
+            {req_err_msg}")
         return None
+
 
 def main() -> None:
     """
@@ -158,14 +159,15 @@ def main() -> None:
     land_info_for_iter = land_info.copy()
     land_info_for_iter = land_info_for_iter.drop_duplicates(subset=['land_id'])
     print(f"land_info_for_iter: {land_info_for_iter}")
-    
+
     # # Generate GeoJSON for the request body of the API
+    # To-do: move this into the loop to avoid memory error
     geojsons = generate_geojson_for_request_body(land_info_for_iter)
-    
+
     # Get satellite data from the API
     print('Now is going to get the satellite data from the API ...')
     engine = create_engine(DB_CONN_STR)
-    
+
     with Session(engine) as session:
         try:
             for index, row in land_info_for_iter.iterrows():
@@ -175,23 +177,28 @@ def main() -> None:
                 for index_i in ["NDRE", "NDVI", "NDWI", "NDWI2"]:
                     print("-----------------------------------")
                     print(f"curr_land_id: {curr_land_id}, index_i: {index_i}")
-                    index_date = land_info[(land_info['land_id'] == curr_land_id) & (land_info['index_name'] == index_i)]['max_index_date']
-                    
+                    index_date = land_info[(land_info['land_id'] == curr_land_id) & (
+                        land_info['index_name'] == index_i)]['max_index_date']
+
                     print(f"index_date: {index_date}")
                     if index_date.empty == False:
-                        result = get_satellite_data_from_api(geojsons[(curr_land_id, index_i)], index_i, date_add_one_day(index_date.iloc[0]))
+                        result = get_satellite_data_from_api(
+                            geojsons[(curr_land_id, index_i)], index_i, date_add_one_day(index_date.iloc[0]))
                     else:
-                        result = get_satellite_data_from_api(geojsons[(curr_land_id, index_i)], index_i, "")
-                    
+                        result = get_satellite_data_from_api(
+                            geojsons[(curr_land_id, index_i)], index_i, "")
+
                     # add data rows in result to satellite_df
                     if result.empty == False:
                         result['land_id'] = curr_land_id
-                        result.to_sql('land_satellite_index_data', con=engine, if_exists='append', index=False)
-            
-            session.commit()
+                        result.to_sql('land_satellite_index_data',
+                                      con=session, if_exists='append', index=False)
+                        session.commit()
         except exc.SQLAlchemyError as req_err_msg:
-            print(f"An error occurred while writing data into DB: {req_err_msg}")       
-            session.rollback()         
+            print(f"An error occurred while writing data into DB: \
+                {req_err_msg}")
+            session.rollback()
+
 
 if __name__ == '__main__':
     try:

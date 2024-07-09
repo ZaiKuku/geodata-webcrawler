@@ -1,13 +1,13 @@
-from urllib.parse import quote
+import json
+import time
 import urllib.parse
-import requests
+from urllib.parse import quote
+
 import pandas as pd
+import requests
+from config import load_config
 from sqlalchemy import create_engine, exc
 from sqlalchemy.orm import Session
-from config import load_config
-import time
-import json
-
 
 # 加载配置并存储在变量中``
 config = load_config()
@@ -22,7 +22,7 @@ DB_PORT = config['db_port']
 DB_NAME = config['db_name']
 DB_CONN_STR = config['db_conn_str']
 
-                           
+
 def get_section_info() -> pd.DataFrame:
     """
     Fetches section information data from the API.
@@ -40,7 +40,8 @@ def get_section_info() -> pd.DataFrame:
     dbname = "land"
     port = "3306"
     host = "192.168.1.103"
-    db_conn_land = f"mysql+pymysql://{username}:{password}@{host}:{port}/{dbname}"
+    db_conn_land = f"mysql+pymysql://{username}:{
+        password}@{host}:{port}/{dbname}"
     with create_engine(db_conn_land).connect() as conn_taft:
         try:
             print('Now is going to get section info from DB ...')
@@ -51,11 +52,14 @@ def get_section_info() -> pd.DataFrame:
                 ''',
                 conn_taft
             )
-            print(f"There are {section_info.shape[0]} section info records fetched.") 
+            print(f"There are {
+                  section_info.shape[0]} section info records fetched.")
             return section_info
         except exc.SQLAlchemyError as req_err_msg:
-            print(f"An error occurred while writing data into DB: {req_err_msg}")
+            print(f"An error occurred while writing data into DB: {
+                  req_err_msg}")
             conn_taft.rollback()
+
 
 def preprocess_land_serial_no(resume_land_info_df: pd.DataFrame, section_info_df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -66,31 +70,40 @@ def preprocess_land_serial_no(resume_land_info_df: pd.DataFrame, section_info_df
             - unit_id
             - section_id
             - full_land_no
-            
+
         section_info_df (pd.DataFrame): The section info DataFrame containing the following columns:
 
     Returns:
         pd.DataFrame: A DataFrame containing the preprocessed land serial number data containing the following columns:
     """
     print('Now is going to preprocess the land serial number ...')
-    unknown_lands_processed = pd.merge(resume_land_info_df, section_info_df, on=['unit_id', 'section_id'], how='left')
-    unknown_lands_processed['parcel_1'] = unknown_lands_processed['full_land_no'].str.slice(0, 4).apply(lambda x: int(x) if x.isdigit() else '').astype(str)
-    unknown_lands_processed['parcel_2'] = unknown_lands_processed['full_land_no'].str.slice(4, 8).apply(lambda x: int(x) if x.isdigit() else '').astype(str)
-    unknown_lands_processed['land_serial_no'] = unknown_lands_processed['county_name'] + unknown_lands_processed['town_name'] + unknown_lands_processed['section_name'] + unknown_lands_processed['parcel_1'] +'-'+ unknown_lands_processed['parcel_2'] + '地號'
-    unknown_lands_processed['land_serial_no'] = unknown_lands_processed['land_serial_no'].str.replace('-0', '')
-    unknown_lands_processed = unknown_lands_processed.query('land_serial_no.str.contains("NA") == False')
-    unknown_lands_processed = unknown_lands_processed.query('county_name not in ["澎湖縣", "金門縣", "連江縣"]')
+    unknown_lands_processed = pd.merge(resume_land_info_df, section_info_df, on=[
+                                       'unit_id', 'section_id'], how='left')
+    unknown_lands_processed['parcel_1'] = unknown_lands_processed['full_land_no'].str.slice(
+        0, 4).apply(lambda x: int(x) if x.isdigit() else '').astype(str)
+    unknown_lands_processed['parcel_2'] = unknown_lands_processed['full_land_no'].str.slice(
+        4, 8).apply(lambda x: int(x) if x.isdigit() else '').astype(str)
+    unknown_lands_processed['land_serial_no'] = unknown_lands_processed['county_name'] + unknown_lands_processed['town_name'] + \
+        unknown_lands_processed['section_name'] + unknown_lands_processed['parcel_1'] + \
+        '-' + unknown_lands_processed['parcel_2'] + '地號'
+    unknown_lands_processed['land_serial_no'] = unknown_lands_processed['land_serial_no'].str.replace(
+        '-0', '')
+    unknown_lands_processed = unknown_lands_processed.query(
+        'land_serial_no.str.contains("NA") == False')
+    unknown_lands_processed = unknown_lands_processed.query(
+        'county_name not in ["澎湖縣", "金門縣", "連江縣"]')
     unknown_lands_processed.reset_index(drop=True, inplace=True)
     return unknown_lands_processed
+
 
 def get_land_serial_no_geometry(land_serial_no, land_version='112Oct'):
     '''
     Get the land info by land_serial_no from coagis.colife.org.tw
-    
+
     Args:   
         land_serial_no (str): The land_serial_no of the land.
         land_version (str): The land_version of the land.
-        
+
     Returns:
         dict: The land info of the land.
     '''
@@ -118,22 +131,25 @@ def get_land_serial_no_geometry(land_serial_no, land_version='112Oct'):
     if response.status_code == 200:
         print(response.json()['ReturnDescription'])
         if "接近" in response.json()['ReturnDescription']:
-            print(f"Failed to fetch land info of land_serial_no: {land_serial_no}")
+            print(f"Failed to fetch land info of land_serial_no: {
+                  land_serial_no}")
             return None
-        print(f"Successfully fetched land info of land_serial_no: {land_serial_no}")
+        print(f"Successfully fetched land info of land_serial_no: {
+              land_serial_no}")
         return json.loads(response.json()['ReturnResult'][0]['ReturnPolygon'])['rings']
     else:
         response.raise_for_status()
-        
+
+
 def get_s_n_id_geometry(unit_id, section_id, full_land_no):
     '''
     Get the land info by unit_id, section_id, full_land_no from taft.moa.gov.tw
-    
+
     Args:
         unit_id (str): The unit_id of the land.
         section_id (str): The section_id of the land.
         full_land_no (str): The full_land_no of the land.
-        
+
     Returns:
         list: The coordinates of the land.
     '''
@@ -141,7 +157,7 @@ def get_s_n_id_geometry(unit_id, section_id, full_land_no):
         "Host": "taft.moa.gov.tw",
         "Origin": "https://taft.moa.gov.tw"
     }
-    
+
     response = requests.post(
         'https://taft.moa.gov.tw/sp-resume-service-1.html',
         data={
@@ -151,17 +167,19 @@ def get_s_n_id_geometry(unit_id, section_id, full_land_no):
         },
         headers=request_headers
     )
-    
+
     response_content = response.json()
     # print(response_content)
-    
-    if response_content['success'] == True:
+
+    if response_content['success']:
         print(f"Successfully fetched land info of trace code: {full_land_no}")
         return response_content['data'][0]['geometry']['rings']
     else:
-        print(f"Failed to fetch land info of SID: {unit_id}{section_id} NID: {full_land_no}")
+        print(f"Failed to fetch land info of SID: {
+              unit_id}{section_id} NID: {full_land_no}")
         return None
-        
+
+
 def land_no_convert(unit_id, section_id, full_land_no):
     request_headers = {
         "Host": "openapi.land.moi.gov.tw",
@@ -180,13 +198,14 @@ def land_no_convert(unit_id, section_id, full_land_no):
             headers=request_headers
         )
     except Exception as e:
-        print(f"An error occurred while converting land_no: {full_land_no} - {e}")
+        print(f"An error occurred while converting land_no: {
+              full_land_no} - {e}")
         return None
-    
+
     response_content = response.json()
-    
+
     return response_content
-    
+
 
 def main() -> None:
     """
@@ -211,64 +230,74 @@ def main() -> None:
                 ''',
                 conn_taft
             )
-            print(f"There are {missing_land_info.shape[0]} trace code records is missing land information.") 
+            print(f"There are {
+                  missing_land_info.shape[0]} trace code records is missing land information.")
 
         except exc.SQLAlchemyError as req_err_msg:
-            print(f"An error occurred while writing data into DB: {req_err_msg}")
+            print(f"An error occurred while writing data into DB: {
+                  req_err_msg}")
             conn_taft.rollback()
-    
-    unknown_lands = preprocess_land_serial_no(missing_land_info, get_section_info())
-    print(f"There are {unknown_lands.shape[0]} unknown land serial number records fetched.")
+
+    unknown_lands = preprocess_land_serial_no(
+        missing_land_info, get_section_info())
+    print(f"There are {
+          unknown_lands.shape[0]} unknown land serial number records fetched.")
     total_update_records = 0
-    
+
     unknown_lands["coordinates"] = None
+    # to-do: distinguish multi and single polygon
     unknown_lands["geometry_type"] = "MultiPolygon"
-    
+
     for index, row in unknown_lands.iterrows():
         time.sleep(1)
         print("--------------------------------------------------")
         print(f"Processing record {index + 1} of {unknown_lands.shape[0]} ...")
         print("->")
-        land_info = get_s_n_id_geometry(row['unit_id'], row['section_id'], row['full_land_no'])
+        land_info = get_s_n_id_geometry(
+            row['unit_id'], row['section_id'], row['full_land_no'])
         if land_info is not None:
             row["coordinates"] = land_info
             continue
-        
+
         # # transform land_no to new one
-        new_land_no = land_no_convert(row['unit_id'], row['section_id'], row['full_land_no'])
+        new_land_no = land_no_convert(
+            row['unit_id'], row['section_id'], row['full_land_no'])
         if new_land_no["RETURNROWS"] != 0:
-            land_info = get_s_n_id_geometry(new_land_no["RESPONSE"][0]["UNIT"], new_land_no["RESPONSE"][0]["SEC"], new_land_no["RESPONSE"][0]["NO"])
+            land_info = get_s_n_id_geometry(
+                new_land_no["RESPONSE"][0]["UNIT"], new_land_no["RESPONSE"][0]["SEC"], new_land_no["RESPONSE"][0]["NO"])
             if land_info is not None:
-                row["coordinates"] = [land_info]
+                row["coordinates"] = land_info
                 continue
-        
+
         # fetch land info by land_serial_no
+        # To-do: move this api out from the loop and update the db first
         land_serial_no = row['land_serial_no']
         land_info = get_land_serial_no_geometry(land_serial_no)
         if land_info is not None:
             row["coordinates"] = land_info
-            continue
-        
-    
-    
+
     # remove unnecessary columns
-    unknown_lands['coordinates'] = unknown_lands['coordinates'].apply(lambda x: str(x) if x is not None else None)
-    unknown_lands.drop(columns=['county_name', 'town_name', 'section_name', 'parcel_1', 'parcel_2'], inplace=True)
-    
+    unknown_lands['coordinates'] = unknown_lands['coordinates'].apply(
+        lambda x: str(x) if x is not None else None)
+    unknown_lands.drop(columns=['county_name', 'town_name',
+                       'section_name', 'parcel_1', 'parcel_2'], inplace=True)
+
     engine = create_engine(DB_CONN_STR)
     with Session(engine) as session:
         try:
             print('Now is going to insert the land info into DB ...')
-            unknown_lands.to_sql('land_info', con=engine, if_exists='append', index=False)
+            unknown_lands.to_sql('land_info', con=session,
+                                 if_exists='append', index=False)
             total_update_records = unknown_lands.shape[0]
             session.commit()
         except exc.SQLAlchemyError as req_err_msg:
-            print(f"An error occurred while writing data into DB: {req_err_msg}")
+            print(f"An error occurred while writing data into DB: {
+                  req_err_msg}")
             session.rollback()
-        
 
-        
-    print(f"All update is done! There are {total_update_records} record(s) inserted in total.")
+    print(f"All update is done! There are {
+          total_update_records} record(s) inserted in total.")
+
 
 if __name__ == '__main__':
     try:
