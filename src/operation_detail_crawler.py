@@ -2,20 +2,7 @@ import urllib.parse
 import requests
 import pandas as pd
 from sqlalchemy import create_engine, exc
-
-# Define Variables
-RESUME_DATA_API_ENDPOINT = "https://data.coa.gov.tw/Service/OpenData/Resume/ResumeData_Plus.aspx"
-
-DB_US = "datayoo"
-DB_PW = urllib.parse.quote_plus("*@(!)@&#")
-DB_HT = "192.168.1.103"
-DB_PORT = "3306"
-DB_NAME = "taft"
-DB_CONN_STR = f"mysql+pymysql://{DB_US}:{DB_PW}@{DB_HT}:{DB_PORT}/{DB_NAME}"
-
-OPERATION_DETAIL_API_ENDPOINT = (
-    "https://data.coa.gov.tw/Service/OpenData/Resume/OperationDetail_Plus.aspx?"
-)
+from config import DB_CONN_STR, OPERATION_DETAIL_API_ENDPOINT
 
 def fetch_operation_detail(trace_code: str) -> pd.DataFrame:
     """
@@ -33,6 +20,7 @@ def fetch_operation_detail(trace_code: str) -> pd.DataFrame:
             - trace_code
     """
     params = {"Tracecode": trace_code}
+    print(f"Now is going to get operation detail info records of trace code: {trace_code}")
     response = requests.get(OPERATION_DETAIL_API_ENDPOINT, params=params)
     response_content = response.json()
     response_df = pd.json_normalize(response_content)
@@ -69,7 +57,7 @@ def process_and_insert_operation_detail(fetched_operation_detail_df: pd.DataFram
             print(f"An error occurred while writing data into DB: {update_err_msg}")
             conn_taft.rollback()
 
-def main() -> None:
+def operation_detail_crawler() -> None:
     """
     Fetches resume data, processes it, and writes it into the database.
 
@@ -81,6 +69,7 @@ def main() -> None:
     """
     with create_engine(DB_CONN_STR).connect() as conn_taft:
         try:
+            print('Now is going to get the trace code list lack of operation detail info from DB ...')
             trace_codes_missing_oper_detail = pd.read_sql(
                 '''
                 SELECT DISTINCT resume_data.trace_code 
@@ -107,7 +96,4 @@ def main() -> None:
     print(f"All update is done! There are {total_update_records} record(s) inserted in total.")
 
 if __name__ == '__main__':
-    try:
-        main()
-    except Exception as e:
-        print(f"An error occurred: {e}")
+    operation_detail_crawler()
