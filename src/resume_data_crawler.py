@@ -54,7 +54,8 @@ def fetch_and_process_resume_data(last_time_update: str) -> pd.DataFrame:
             break
         resume_data_list.append(new_fetched_resume_data)
         
-
+    if len(resume_data_list) == 0:
+        return pd.DataFrame()
     resume_data_df = pd.concat(resume_data_list)
     resume_data_df.drop_duplicates(inplace=True)
 
@@ -154,6 +155,9 @@ def resume_data_crawler() -> None:
     """
     last_time_update = fetch_last_time_update("resume_data")
     resume_data_tbw = fetch_and_process_resume_data(last_time_update)
+    if resume_data_tbw.empty:
+        print("No new data to write into DB.")
+        return
     resume_land_info_tbw = process_operation_detail_data(resume_data_tbw)
     resume_data_tbw.drop(['LandSecNO'], inplace=True, axis=1)
     print(f'There are {resume_data_tbw.shape[0]} resume data records and {resume_land_info_tbw.shape[0]} resume land info records collected in total.')
