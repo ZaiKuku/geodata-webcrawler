@@ -5,23 +5,8 @@ from urllib.parse import quote
 
 import pandas as pd
 import requests
-from config import load_config
+from config import DB_CONN_STR
 from sqlalchemy import create_engine, exc
-from sqlalchemy.orm import Session
-
-# 加载配置并存储在变量中``
-config = load_config()
-
-# Define Variables
-RESUME_DATA_API_ENDPOINT = config['resume_data_api_endpoint']
-RESUME_DATA_REQ_MAXIMUM = int(config['resume_data_req_maximum'])
-DB_US = config['db_us']
-DB_PW = config['db_pw']
-DB_HT = config['db_ht']
-DB_PORT = config['db_port']
-DB_NAME = config['db_name']
-DB_CONN_STR = config['db_conn_str']
-
 
 def get_section_info() -> pd.DataFrame:
     """
@@ -40,8 +25,7 @@ def get_section_info() -> pd.DataFrame:
     dbname = "land"
     port = "3306"
     host = "192.168.1.103"
-    db_conn_land = f"mysql+pymysql://{username}:{
-        password}@{host}:{port}/{dbname}"
+    db_conn_land = f"mysql+pymysql://{username}:{password}@{host}:{port}/{dbname}"
     with create_engine(db_conn_land).connect() as conn_taft:
         try:
             print('Now is going to get section info from DB ...')
@@ -52,12 +36,10 @@ def get_section_info() -> pd.DataFrame:
                 ''',
                 conn_taft
             )
-            print(f"There are {
-                  section_info.shape[0]} section info records fetched.")
+            print(f"There are {section_info.shape[0]} section info records fetched.")
             return section_info
         except exc.SQLAlchemyError as req_err_msg:
-            print(f"An error occurred while writing data into DB: {
-                  req_err_msg}")
+            print(f"An error occurred while writing data into DB: {req_err_msg}")
             conn_taft.rollback()
 
 
@@ -95,6 +77,26 @@ def preprocess_land_serial_no(resume_land_info_df: pd.DataFrame, section_info_df
     unknown_lands_processed.reset_index(drop=True, inplace=True)
     return unknown_lands_processed
 
+def determine_geometry_type(coordinates: str) -> str:
+    """
+    Determine the geometry type based on the given coordinates.
+
+    Args:
+        coordinates (str): The coordinates.
+
+    Returns:
+        str: The geometry type.
+    """
+    if coordinates.startswith("[[[["):
+        return "MultiPolygon"
+    elif coordinates.startswith("[[["):
+        return "Polygon"
+    elif coordinates.startswith("[["):
+        return "LineString"
+    elif coordinates.startswith("["):
+        return "Point"
+    else:
+        return None
 
 def get_land_serial_no_geometry(land_serial_no, land_version='112Oct'):
     '''
@@ -131,15 +133,12 @@ def get_land_serial_no_geometry(land_serial_no, land_version='112Oct'):
     if response.status_code == 200:
         print(response.json()['ReturnDescription'])
         if "接近" in response.json()['ReturnDescription']:
-            print(f"Failed to fetch land info of land_serial_no: {
-                  land_serial_no}")
+            print(f"Failed to fetch land info of land_serial_no: {land_serial_no}")
             return None
-        print(f"Successfully fetched land info of land_serial_no: {
-              land_serial_no}")
+        print(f"Successfully fetched land info of land_serial_no: {land_serial_no}")
         return json.loads(response.json()['ReturnResult'][0]['ReturnPolygon'])['rings']
     else:
         response.raise_for_status()
-
 
 def get_s_n_id_geometry(unit_id, section_id, full_land_no):
     '''
@@ -175,8 +174,7 @@ def get_s_n_id_geometry(unit_id, section_id, full_land_no):
         print(f"Successfully fetched land info of trace code: {full_land_no}")
         return response_content['data'][0]['geometry']['rings']
     else:
-        print(f"Failed to fetch land info of SID: {
-              unit_id}{section_id} NID: {full_land_no}")
+        print(f"Failed to fetch land info of SID: {unit_id}{section_id} NID: {full_land_no}")
         return None
 
 
@@ -198,8 +196,7 @@ def land_no_convert(unit_id, section_id, full_land_no):
             headers=request_headers
         )
     except Exception as e:
-        print(f"An error occurred while converting land_no: {
-              full_land_no} - {e}")
+        print(f"An error occurred while converting land_no: {full_land_no} - {e}")
         return None
 
     response_content = response.json()
@@ -207,7 +204,7 @@ def land_no_convert(unit_id, section_id, full_land_no):
     return response_content
 
 
-def main() -> None:
+def resume_land_info_crawler() -> None:
     """
     Fetches land information data, processes it, and writes it into the database.
 
@@ -230,23 +227,18 @@ def main() -> None:
                 ''',
                 conn_taft
             )
-            print(f"There are {
-                  missing_land_info.shape[0]} trace code records is missing land information.")
+            print(f"There are {missing_land_info.shape[0]} trace code records is missing land information.")
 
         except exc.SQLAlchemyError as req_err_msg:
-            print(f"An error occurred while writing data into DB: {
-                  req_err_msg}")
+            print(f"An error occurred while writing data into DB: {req_err_msg}")
             conn_taft.rollback()
 
     unknown_lands = preprocess_land_serial_no(
         missing_land_info, get_section_info())
-    print(f"There are {
-          unknown_lands.shape[0]} unknown land serial number records fetched.")
+    print(f"There are {unknown_lands.shape[0]} unknown land serial number records fetched.")
     total_update_records = 0
 
     unknown_lands["coordinates"] = None
-    # to-do: distinguish multi and single polygon
-    unknown_lands["geometry_type"] = "MultiPolygon"
 
     for index, row in unknown_lands.iterrows():
         time.sleep(1)
@@ -268,39 +260,36 @@ def main() -> None:
             if land_info is not None:
                 row["coordinates"] = land_info
                 continue
-
+        
+    for index, row in unknown_lands.iterrows():
         # fetch land info by land_serial_no
-        # To-do: move this api out from the loop and update the db first
         land_serial_no = row['land_serial_no']
         land_info = get_land_serial_no_geometry(land_serial_no)
         if land_info is not None:
             row["coordinates"] = land_info
 
+    unknown_lands['geometry_type'] = unknown_lands['coordinates'].apply(
+        determine_geometry_type)
+    
+    
     # remove unnecessary columns
     unknown_lands['coordinates'] = unknown_lands['coordinates'].apply(
         lambda x: str(x) if x is not None else None)
     unknown_lands.drop(columns=['county_name', 'town_name',
                        'section_name', 'parcel_1', 'parcel_2'], inplace=True)
 
-    engine = create_engine(DB_CONN_STR)
-    with Session(engine) as session:
+    with create_engine(DB_CONN_STR).connect() as conn_taft:
         try:
             print('Now is going to insert the land info into DB ...')
-            unknown_lands.to_sql('land_info', con=session,
+            unknown_lands.to_sql('land_info', con=conn_taft,
                                  if_exists='append', index=False)
             total_update_records = unknown_lands.shape[0]
-            session.commit()
+            conn_taft.commit()
         except exc.SQLAlchemyError as req_err_msg:
-            print(f"An error occurred while writing data into DB: {
-                  req_err_msg}")
-            session.rollback()
+            print(f"An error occurred while writing data into DB: {req_err_msg}")
+            conn_taft.rollback()
 
-    print(f"All update is done! There are {
-          total_update_records} record(s) inserted in total.")
-
+    print(f"All update is done! There are {total_update_records} record(s) inserted in total.")
 
 if __name__ == '__main__':
-    try:
-        main()
-    except Exception as e:
-        print(f"An error occurred: {e}")
+    resume_land_info_crawler()

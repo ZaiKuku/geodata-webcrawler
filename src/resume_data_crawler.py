@@ -1,22 +1,8 @@
-import urllib.parse
 import requests
 import pandas as pd
 from sqlalchemy import create_engine, exc
 from sqlalchemy.orm import Session
-from config import load_config
-
-# 加载配置并存储在变量中
-config = load_config()
-
-# Define Variables
-RESUME_DATA_API_ENDPOINT = config['resume_data_api_endpoint']
-RESUME_DATA_REQ_MAXIMUM = int(config['resume_data_req_maximum'])
-DB_US = config['db_us']
-DB_PW = config['db_pw']
-DB_HT = config['db_ht']
-DB_PORT = config['db_port']
-DB_NAME = config['db_name']
-DB_CONN_STR = config['db_conn_str']
+from config import DB_CONN_STR, RESUME_DATA_API_ENDPOINT, RESUME_DATA_REQ_MAXIMUM
 
 def fetch_resume_data(skip: int) -> pd.DataFrame:
     """
@@ -68,8 +54,6 @@ def fetch_and_process_resume_data(last_time_update: str) -> pd.DataFrame:
             break
         resume_data_list.append(new_fetched_resume_data)
         
-    
-    # resume_data_list = [fetch_resume_data(skip_i) for skip_i in range(0, RESUME_DATA_REQ_MAXIMUM, 10000)]
 
     resume_data_df = pd.concat(resume_data_list)
     resume_data_df.drop_duplicates(inplace=True)
@@ -158,7 +142,7 @@ def fetch_last_time_update(table_name: str) -> str:
             
     
 
-def main():
+def resume_data_crawler() -> None:
     """
     Fetches resume data, processes it, and writes it into the database.
 
@@ -174,8 +158,7 @@ def main():
     resume_data_tbw.drop(['LandSecNO'], inplace=True, axis=1)
     print(f'There are {resume_data_tbw.shape[0]} resume data records and {resume_land_info_tbw.shape[0]} resume land info records collected in total.')
 
-    conn_taft = create_engine(DB_CONN_STR)
-    with Session(conn_taft) as session:
+    with create_engine(DB_CONN_STR).connect() as conn_taft:
         try:
             # Get existing trace codes from database
             print('Data fetching and post-processing is done! Now is going to retrieve existed trace code in DB ...')
@@ -194,15 +177,12 @@ def main():
             resume_land_info_tbw_filtered = resume_land_info_tbw[~resume_land_info_tbw['trace_code'].isin(resume_land_info_existed_tc['trace_code'])]
             print(f'There are {resume_land_info_tbw_filtered.shape[0]} new trace code records is ready to write into table resume_land_info.')
             resume_land_info_tbw_filtered.to_sql("resume_land_info", conn_taft, if_exists="append", index=False)
-            session.commit()
+            conn_taft.commit()
             print('DB tables update is done!')
         except exc.SQLAlchemyError as err_msg:
             print(f"An error occurred while writing data into DB: {err_msg}")
             # Perform rollback
-            session.rollback()
+            conn_taft.rollback()
 
 if __name__ == '__main__':
-    try:
-        main()
-    except Exception as e:
-        print(f"An error occurred: {e}")
+    resume_data_crawler()

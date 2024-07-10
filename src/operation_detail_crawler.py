@@ -2,22 +2,7 @@ import urllib.parse
 import requests
 import pandas as pd
 from sqlalchemy import create_engine, exc
-from sqlalchemy.orm import Session
-from config import load_config
-
-# 加载配置并存储在变量中``
-config = load_config()
-
-# Define Variables
-RESUME_DATA_API_ENDPOINT = config['resume_data_api_endpoint']
-RESUME_DATA_REQ_MAXIMUM = int(config['resume_data_req_maximum'])
-DB_US = config['db_us']
-DB_PW = config['db_pw']
-DB_HT = config['db_ht']
-DB_PORT = config['db_port']
-DB_NAME = config['db_name']
-DB_CONN_STR = config['db_conn_str']
-OPERATION_DETAIL_API_ENDPOINT = config['operation_detail_api_endpoint']
+from config import DB_CONN_STR, OPERATION_DETAIL_API_ENDPOINT
 
 def fetch_operation_detail(trace_code: str) -> pd.DataFrame:
     """
@@ -62,18 +47,17 @@ def process_and_insert_operation_detail(fetched_operation_detail_df: pd.DataFram
         "OperationMemo": "operation_memo"
     }, inplace=True)
 
-    conn_taft = create_engine(DB_CONN_STR)
-    with Session(conn_taft) as session_taft:
+    with create_engine(DB_CONN_STR).connect() as conn_taft:
         try:
             print(f"Updating {fetched_operation_detail_df.shape[0]} operation detail info records of trace code: {fetched_operation_detail_df['trace_code'].iloc[0]}")
             fetched_operation_detail_df.to_sql("resume_operation_detail_info", conn_taft, if_exists="append", index=False)
             print("Updating operation is done.")
-            session_taft.commit()
+            conn_taft.commit()
         except exc.SQLAlchemyError as update_err_msg:
             print(f"An error occurred while writing data into DB: {update_err_msg}")
-            session_taft.rollback()
+            conn_taft.rollback()
 
-def main() -> None:
+def operation_detail_crawler() -> None:
     """
     Fetches resume data, processes it, and writes it into the database.
 
@@ -112,7 +96,4 @@ def main() -> None:
     print(f"All update is done! There are {total_update_records} record(s) inserted in total.")
 
 if __name__ == '__main__':
-    try:
-        main()
-    except Exception as e:
-        print(f"An error occurred: {e}")
+    operation_detail_crawler()
