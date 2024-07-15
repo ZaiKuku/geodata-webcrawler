@@ -87,6 +87,9 @@ def determine_geometry_type(coordinates: str) -> str:
     Returns:
         str: The geometry type.
     """
+    if coordinates is None:
+        return None
+    
     if coordinates.startswith("[[[["):
         return "MultiPolygon"
     elif coordinates.startswith("[[["):
