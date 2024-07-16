@@ -23,10 +23,11 @@ def fetch_operation_detail(trace_code: str) -> pd.DataFrame:
     print(f"Now is going to get operation detail info records of trace code: {trace_code}")
     try:
         response = requests.get(OPERATION_DETAIL_API_ENDPOINT, params=params)
+        response_content = response.json()
     except requests.exceptions.RequestException as req_err_msg:
         print(f"An error occurred while fetching data from API: {req_err_msg}")
         return pd.DataFrame()
-    response_content = response.json()
+    
     response_df = pd.json_normalize(response_content)
     response_df[response_df == ''] = None
     response_df['trace_code'] = trace_code
