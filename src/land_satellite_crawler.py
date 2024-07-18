@@ -117,8 +117,14 @@ def get_satellite_data_from_api(geojson, index_name, last_time_update):
 
         if response.status_code == 200:
             print(f'{index_name} {last_time_update} data is fetched successfully.')
-            if response.json()["result"] == []:
+            try:
+                if response.json()["result"] == []:
+                    return pd.DataFrame()
+            except:
+                print(f"An error occurred while fetching data from the API: \
+                    {response.text}")
                 return pd.DataFrame()
+            
             response_df = pd.DataFrame(response.json()["result"]).rename(
                 columns={'index': 'index_value', 'time': 'index_date'})
             response_df.drop(['field_id', 'cloud'], axis=1, inplace=True)
