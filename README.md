@@ -1,6 +1,9 @@
 # raw-crawler-taft
 ## 介紹
 爬取產銷履歷資料，包含農地衛星數據、生產作業情況、產銷履歷資料、農地資訊等。
+執行順序:
+resume_crawler.py -> operation_detail_crawler.py 
+resume_crawler.py -> resume_land_info_crawler.py -> resume_land_infor_crawler.py
 
 ## 專案架構
 ```
@@ -44,11 +47,11 @@ pip install -r requirements.txt
 
   使用main.py作為進入點, 加上參數執行
 ```
-# List of available crawlers:
-    - land_satellite_crawler
-    - operation_detail_crawler
-    - resume_data_crawler
-    - resume_land_infor_crawler
+# List of available crawler names:
+    - resume_data
+    - operation_detail
+    - resume_land_info
+    - land_satellite
 
 python main.py {crawler_name}
 ```
