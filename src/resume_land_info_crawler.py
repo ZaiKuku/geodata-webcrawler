@@ -169,9 +169,11 @@ def get_s_n_id_geometry(unit_id, section_id, full_land_no):
         },
         headers=request_headers
     )
-
-    response_content = response.json()
+    try:
+        response_content = response.json()
     # print(response_content)
+    except Exception as e:
+        print(f"An error occurred while fetching land info of SID: {unit_id}{section_id} NID: {full_land_no} - {e}")
 
     if response_content['success']:
         print(f"Successfully fetched land info of trace code: {full_land_no}")
